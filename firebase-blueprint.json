@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "Job": {
+      "title": "Job",
+      "description": "Represents a background job task.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobType": { "type": "string", "enum": ["EMAIL", "NOTIFICATION", "PAYMENT", "REPORT", "FILE"] },
+        "payload": { "type": "object" },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "DLQ"] },
+        "retryCount": { "type": "number" },
+        "maxRetries": { "type": "number" },
+        "nextRunAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "errorLog": { "type": "string" }
+      },
+      "required": ["id", "jobType", "payload", "status", "retryCount", "createdAt", "updatedAt"]
+    },
+    "DeadLetterJob": {
+      "title": "DeadLetterJob",
+      "description": "Represents a permanently failed job.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "originalJobId": { "type": "string" },
+        "payload": { "type": "object" },
+        "failureReason": { "type": "string" },
+        "failedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "originalJobId", "payload", "failureReason", "failedAt"]
+    },
+    "Metric": {
+      "title": "Metric",
+      "description": "System performance metrics.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "activeWorkers": { "type": "number" },
+        "queueSize": { "type": "number" },
+        "successCount": { "type": "number" },
+        "failureCount": { "type": "number" },
+        "throughput": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "jobs": {
+      "schema": "Job",
+      "description": "Collection of active and finished jobs."
+    },
+    "dead_letter_queue": {
+      "schema": "DeadLetterJob",
+      "description": "Collection of permanently failed jobs."
+    },
+    "metrics": {
+      "schema": "Metric",
+      "description": "Aggregated system metrics."
+    }
+  }
+}

@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // Job Entity Validation Blueprint
+    function isValidJob(data) {
+      return data.jobType in ['EMAIL', 'NOTIFICATION', 'PAYMENT', 'REPORT', 'FILE']
+        && data.status in ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'DLQ', 'CANCELED']
+        && data.priority in ['LOW', 'MEDIUM', 'HIGH']
+        && data.retryCount is number && data.retryCount >= 0
+        && data.maxRetries is number && data.maxRetries >= 0
+        && data.priorityLevel is number
+        && data.logs is list && data.logs.size() <= 100
+        && (data.createdAt is timestamp || data.createdAt == null)
+        && (data.updatedAt is timestamp || data.updatedAt == null)
+        && (data.nextRunAt is timestamp || data.nextRunAt == null);
+    }
+
+    match /jobs/{jobId} {
+      allow read: if isValidId(jobId);
+      allow list: if true; // Dashboard read
+      
+      allow create: if isValidId(jobId) 
+                   && isValidJob(incoming())
+                   && incoming().status == 'PENDING'
+                   && incoming().retryCount == 0
+                   && (incoming().createdAt == request.time || incoming().createdAt != null);
+      
+      allow update: if isValidId(jobId)
+                   && isValidJob(incoming())
+                   && (
+                     // Action: Start Processing (Atomic claim)
+                     (existing().status == 'PENDING' && incoming().status == 'PROCESSING' 
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'workerName', 'logs']))
+                     ||
+                     // Action: Success Completion
+                     (existing().status == 'PROCESSING' && incoming().status == 'COMPLETED'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'logs']))
+                     ||
+                     // Action: Transient Failure / Retry
+                     ((existing().status == 'PROCESSING' || existing().status == 'PENDING') 
+                      && incoming().status == 'PENDING'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'retryCount', 'nextRunAt', 'errorLog', 'logs']))
+                     ||
+                     // Action: Move to DLQ (Max Retries)
+                     (existing().status == 'PROCESSING' && incoming().status == 'DLQ'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'errorLog', 'logs', 'aiAnalysis']))
+                     ||
+                     // Action: Manual Retry / Re-queue
+                     ((existing().status == 'FAILED' || existing().status == 'DLQ' || existing().status == 'CANCELED') 
+                      && incoming().status == 'PENDING'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'retryCount', 'nextRunAt', 'errorLog', 'logs']))
+                     ||
+                     // Action: Manual Cancel
+                     (existing().status == 'PENDING' && incoming().status == 'CANCELED'
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'logs']))
+                   );
+    }
+
+    match /dead_letter_queue/{dqId} {
+      allow get: if isValidId(dqId);
+      allow list: if true;
+      allow create: if isValidId(dqId)
+                   && incoming().keys().hasAll(['originalJobId', 'payload', 'failureReason', 'failedAt'])
+                   && (incoming().failedAt == request.time || incoming().failedAt != null);
+      allow delete: if isValidId(dqId);
+    }
+
+    match /metrics/{mId} {
+      allow get: if isValidId(mId);
+      allow list: if true;
+      allow write: if isValidId(mId);
+    }
+  }
+}

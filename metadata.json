@@ -1,0 +1,8 @@
+{
+  "name": "DISTROQUEUE",
+  "description": "High-throughput distributed background job processing system with concurrent workers, exponential backoff retries, and dead-letter storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
