@@ -74,7 +74,7 @@ A robust, production-grade infrastructure that provides 99.9% reliability for ba
 
 ---
 
-## 🔐 Configuration & Security (DO NOT SHARE KEYS)
+## 🔐 Configuration & Security 
 
 To maintain security, **never commit your `.env` file to GitHub**. Use environment variables for all secrets.
 
